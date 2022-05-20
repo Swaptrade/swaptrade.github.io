@@ -1,5 +1,5 @@
-# CryptiSwap API Documentation
-This is the official API Document for aggregators, other exchanges and websites to use the [CryptiSwap] exchange. Anyone can request an API key and it's a really simple process, please email us at admin@cryptiswap.org or visit the [contact us] page on our website to chat with us live.
+# Quantex API Documentation
+This is the official API Document for aggregators, other exchanges and websites to use the [Quantex] exchange. Anyone can request an API key and it's a really simple process, please email us at admin@cryptiswap.org or visit the [contact us] page on our website to chat with us live.
 
 [Cryptiswap]: https://cryptiswap.org/
 [contact us]: https://cryptiswap.org/contact
@@ -7,7 +7,7 @@ This is the official API Document for aggregators, other exchanges and websites 
 API URL : https://admin.cryptiswap.org/api/v1/
 
 **Overview**
-This API document was created for aggregators, other websites and exchanges to use the Cryptiswap exchange to allow users to swap crypto without registration.
+This API document was created for aggregators, other websites and exchanges to use the Quantex exchange to allow users to swap crypto without registration.
 
 **Authentication**
 To have access to this API, you must have an API key, please [contact us] for this and it should be available on the same day. When typing in the API command, add "?APIKEY=yourapikeyhere" Replace "yourapikeyhere" with your actual API key. So for exmaple: https://admin.cryptiswap.org/api/v1/get-currencies?APIKEY=yourapikeyhere
@@ -22,7 +22,7 @@ There currently is no limit on the amount of calls to the server. This might cha
 
 ## API's
 ### getCurrencies
-The result is a list of all the Cryptocurrencies available on the Cryptiswap exchange
+The result is a list of all the Cryptocurrencies available on the Quantex exchange
 ```bash
 https://admin.cryptiswap.org/api/v1/get-currencies
 ```
@@ -86,7 +86,7 @@ amount:  amount of user send coin <br />
 }
 ```
 ### createOrder
-This will open an order on the cryptiswap server
+This will open an order on the Quantex server
 ```bash
 https://admin.cryptiswap.org/api/v1/create-order
 ```
