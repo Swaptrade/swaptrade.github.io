@@ -237,7 +237,7 @@ paths:
           description: Invalid
   /assets-info:
     servers:
-      - url: 'https://api.swaptrade.io/api/trade'
+      - url: 'https://ec2.swaptrade.io/api/trade'
     get:
       security:
         - bearerAuth: []
