@@ -1,27 +1,37 @@
 openapi: 3.0.0
 info:
-  title: Quantex Back-End
-  version: ' 0.1.9'
+  title: Swaptrade API Documentation
+  version: '1.0.0'
+  description: |
+    Welcome to the official Swaptrade API documentation. This API allows seamless integration for cryptocurrency swaps, trading, and related services. 
+    Our platform provides a secure and efficient way to access liquidity, check prices, create and manage orders, and retrieve transaction details.
+
   x-logo:
     url: 'https://www.swaptrade.io/static/media/swaptrade-logo.666dd459c9af3fadaf0bee6418f61703.svg'
-    altText: swaptrade
+    altText: Swaptrade
+
 servers:
   - url: 'https://api.swaptrade.io/api'
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+
 paths:
+
   /get-rate:
     servers:
       - url: 'https://api.swaptrade.io/api/swap'
     post:
-      summary: 'Get the rate for coinA/coinB, e.g. 1 BTC = 15 ETH, so price is 15'
+      summary: Get Cryptocurrency Exchange Rate
+      description: Retrieve the current exchange rate for two specified cryptocurrencies.
       tags:
         - Swap
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -29,33 +39,40 @@ paths:
               properties:
                 coin_send:
                   type: string
+                  description: The cryptocurrency you are sending.
                 coin_receive:
                   type: string
+                  description: The cryptocurrency you want to receive.
       responses:
         '200':
-          description: successful
+          description: Exchange rate retrieved successfully
         '400':
-          description: Invalid
+          description: Invalid request parameters
+
   /get-coins:
     servers:
       - url: 'https://api.swaptrade.io/api/swap'
     get:
-      summary: 'Get a list of all supported coins and their price, max/min amount, network fees etc.'
+      summary: Get Supported Cryptocurrencies
+      description: Retrieve a list of all supported cryptocurrencies, including their prices, max/min amounts, and network fees.
       tags:
         - Swap
       responses:
         '200':
-          description: successful
+          description: List retrieved successfully
         '400':
-          description: Invalid
+          description: Invalid request
+
   /check-valid-wallet-address:
     servers:
       - url: 'https://api.swaptrade.io/api/swap'
     post:
-      summary: Check if the address format is correct or not
+      summary: Validate Cryptocurrency Wallet Address
+      description: Verify if a wallet address format is valid for a specified asset.
       tags:
         - Swap
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -63,51 +80,26 @@ paths:
               properties:
                 asset:
                   type: string
+                  description: The cryptocurrency asset to check.
                 walletId:
                   type: string
+                  description: The wallet address to validate.
       responses:
         '200':
-          description: successful
+          description: Address validation successful
         '400':
-          description: Invalid
-  /get-price:
-    servers:
-      - url: 'https://api.swaptrade.io/api/swap'
-    post:
-      summary: This is the rate minus the fees that Quantex charges. This amount will be more accurate to what the user receives.
-      tags:
-        - Swap
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                coin_send_network:
-                  type: string
-                coin_send:
-                  type: string
-                coin_receive_network:
-                  type: string
-                coin_receive:
-                  type: string
-                amount_send:
-                  type: string
-                markup:
-                  type: integer
-      responses:
-        '200':
-          description: successful
-        '400':
-          description: Invalid
+          description: Invalid request
+
   /create-order:
     servers:
       - url: 'https://api.swaptrade.io/api/swap'
     post:
-      summary: 'Create new order. The coin_receive_network and the coin_send_network will be blank if the coin is a base asset (e.g. BTC, LTC, ETH). If the coin has a network (e.g. USDT_BSC, USDT_ERC20), you must fill in the coin_receive_network and the coin_send_network parameters with the coins network code, see network parameter in /get-coins API.'
+      summary: Create a New Swap Order
+      description: Create a new cryptocurrency swap order with specified parameters.
       tags:
         - Swap
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -115,113 +107,40 @@ paths:
               properties:
                 coin_send:
                   type: string
+                  description: The cryptocurrency being sent.
                 coin_send_network:
                   type: string
+                  description: Network of the sending coin, if applicable.
                 coin_receive:
                   type: string
+                  description: The cryptocurrency to be received.
                 coin_receive_network:
                   type: string
+                  description: Network of the receiving coin, if applicable.
                 amount_send:
                   type: integer
+                  description: The amount being sent.
                 recipient:
                   type: string
+                  description: The receiving wallet address.
                 ref:
                   type: string
+                  description: Optional reference for the order.
                 markup:
                   type: integer
+                  description: Any markup applied to the order.
       responses:
         '200':
-          description: successful
+          description: Order created successfully
         '400':
-          description: Invalid
-  /order:
-    servers:
-      - url: 'https://api.swaptrade.io/api/swap'
-    post:
-      summary: Check order details.
-      tags:
-        - Swap
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                order_id:
-                  type: string
-      responses:
-        '200':
-          description: successful
-        '400':
-          description: Invalid
-  /transaction-details:
-    servers:
-      - url: 'https://api.swaptrade.io/api/swap'
-    get:
-      summary: Get first transaction details from fireblocks which is made by user ( from user wallet account to fireblocks account ).
-      tags:
-        - Swap
-      parameters:
-        - name: destId
-          in: query
-          required: true
-          schema:
-            type: integer
-        - name: assets
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: destAddress
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: successful
-        '400':
-          description: Invalid
-  /get-orders-for-service:
-    servers:
-      - url: 'https://api.swaptrade.io/api/swap'
-    get:
-      summary: Get orders for service.
-      tags:
-        - Swap
-      parameters:
-        - name: trocadoor
-          in: header
-          required: true
-          schema:
-            type: string
-        - name: swapspace
-          in: header
-          required: true
-          schema:
-            type: string
-        - name: flashift
-          in: header
-          required: true
-          schema:
-            type: string
-        - name: cake
-          in: header
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: successful
-        '400':
-          description: Invalid
-        '401':
-          description: Unauthorized
+          description: Invalid request parameters
+
   /fetch-transaction:
     servers:
       - url: 'https://api.swaptrade.io/api/swap'
     get:
-      summary: Get transaction details by transactionId from fireblocks.
+      summary: Retrieve Transaction Details
+      description: Fetch transaction details based on the transaction ID.
       tags:
         - Swap
       parameters:
@@ -230,34 +149,37 @@ paths:
           required: true
           schema:
             type: string
+            description: The ID of the transaction.
       responses:
         '200':
-          description: successful
+          description: Transaction details retrieved successfully
         '400':
-          description: Invalid
+          description: Invalid request
+
   /assets-info:
     servers:
       - url: 'https://ec2.swaptrade.io/api/trade'
     get:
-      security:
-        - bearerAuth: []
+      summary: Retrieve Asset Information
+      description: Get detailed information about supported assets.
       tags:
         - Trade
-      parameters: []
       responses:
         '200':
-          description: successful
+          description: Asset information retrieved successfully
         '400':
-          description: Invalid
+          description: Invalid request
+
   /withdrawal-fees:
     servers:
       - url: 'https://api.swaptrade.io/api/trade'
     get:
+      summary: Retrieve Withdrawal Fees
+      description: Get the latest withdrawal fees for all supported assets.
       tags:
         - Trade
-      parameters: []
       responses:
         '200':
-          description: successful
+          description: Withdrawal fees retrieved successfully
         '400':
-          description: Invalid
+          description: Invalid request
