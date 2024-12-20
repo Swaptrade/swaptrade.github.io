@@ -2,6 +2,9 @@ openapi: 3.0.0
 info:
   title: Quantex Back-End
   version: ' 0.1.9'
+  x-logo:
+    url: 'https://www.swaptrade.io/static/media/swaptrade-logo.666dd459c9af3fadaf0bee6418f61703.svg'
+    altText: swaptrade
 servers:
   - url: 'https://api.swaptrade.io/api'
 components:
