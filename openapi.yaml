@@ -1,8 +1,7 @@
 openapi: 3.0.0
 info:
   title: Swaptrade API Documentation
-  description: |
-    Welcome to the official Swaptrade API documentation. This API allows developers to access Swaptrade's cryptocurrency swapping, trading, and liquidity services.
+  description: Welcome to the official Swaptrade API documentation. This API allows developers to access Swaptrade's cryptocurrency swapping, trading, and liquidity services.
   version: '1.0.0'
   x-logo:
     url: 'https://www.swaptrade.io/static/media/swaptrade-logo.666dd459c9af3fadaf0bee6418f61703.svg'
@@ -219,7 +218,7 @@ paths:
 
   /assets-info:
     servers:
-      - url: 'https://api.swaptrade.io/api/trade'
+      - url: 'https://ec2.swaptrade.io/api/trade'
     get:
       summary: Fetch Supported Assets
       description: Retrieve a list of all supported trading assets.
@@ -228,5 +227,60 @@ paths:
       responses:
         '200':
           description: Supported assets retrieved successfully.
+        '400':
+          description: Invalid request.
+
+  /get-orders-for-service:
+    servers:
+      - url: 'https://api.swaptrade.io/api/swap'
+    get:
+      summary: Retrieve Orders for Service
+      description: Fetch details of all service orders using required headers.
+      tags:
+        - Swap
+      parameters:
+        - name: trocadoor
+          in: header
+          required: true
+          schema:
+            type: string
+          description: The authorization header for the Trocadoor service.
+        - name: swapspace
+          in: header
+          required: true
+          schema:
+            type: string
+          description: The authorization header for the Swapspace service.
+        - name: flashift
+          in: header
+          required: true
+          schema:
+            type: string
+          description: The authorization header for the Flashift service.
+        - name: cake
+          in: header
+          required: true
+          schema:
+            type: string
+          description: The authorization header for the Cake service.
+      responses:
+        '200':
+          description: Orders fetched successfully.
+        '400':
+          description: Invalid request.
+        '401':
+          description: Unauthorized access.
+
+  /withdrawal-fees:
+    servers:
+      - url: 'https://api.swaptrade.io/api/trade'
+    get:
+      summary: Retrieve Withdrawal Fees
+      description: Fetch the applicable withdrawal fees for various cryptocurrencies.
+      tags:
+        - Trade
+      responses:
+        '200':
+          description: Withdrawal fees retrieved successfully.
         '400':
           description: Invalid request.
