@@ -1,11 +1,9 @@
 openapi: 3.0.0
 info:
   title: Swaptrade API Documentation
-  version: '1.0.0'
   description: |
-    Welcome to the official Swaptrade API documentation. This API allows seamless integration for cryptocurrency swaps, trading, and related services. 
-    Our platform provides a secure and efficient way to access liquidity, check prices, create and manage orders, and retrieve transaction details.
-
+    Welcome to the official Swaptrade API documentation. This API allows developers to access Swaptrade's cryptocurrency swapping, trading, and liquidity services.
+  version: '1.0.0'
   x-logo:
     url: 'https://www.swaptrade.io/static/media/swaptrade-logo.666dd459c9af3fadaf0bee6418f61703.svg'
     altText: Swaptrade
@@ -27,7 +25,7 @@ paths:
       - url: 'https://api.swaptrade.io/api/swap'
     post:
       summary: Get Cryptocurrency Exchange Rate
-      description: Retrieve the current exchange rate for two specified cryptocurrencies.
+      description: Get the current exchange rate for a specific pair of cryptocurrencies.
       tags:
         - Swap
       requestBody:
@@ -45,30 +43,30 @@ paths:
                   description: The cryptocurrency you want to receive.
       responses:
         '200':
-          description: Exchange rate retrieved successfully
+          description: Exchange rate retrieved successfully.
         '400':
-          description: Invalid request parameters
+          description: Invalid request.
 
   /get-coins:
     servers:
       - url: 'https://api.swaptrade.io/api/swap'
     get:
-      summary: Get Supported Cryptocurrencies
-      description: Retrieve a list of all supported cryptocurrencies, including their prices, max/min amounts, and network fees.
+      summary: Fetch Supported Cryptocurrencies
+      description: Retrieve the list of supported cryptocurrencies, including prices, min/max amounts, and network fees.
       tags:
         - Swap
       responses:
         '200':
-          description: List retrieved successfully
+          description: Supported coins retrieved successfully.
         '400':
-          description: Invalid request
+          description: Invalid request.
 
   /check-valid-wallet-address:
     servers:
       - url: 'https://api.swaptrade.io/api/swap'
     post:
-      summary: Validate Cryptocurrency Wallet Address
-      description: Verify if a wallet address format is valid for a specified asset.
+      summary: Validate Wallet Address
+      description: Check if a given wallet address is correctly formatted for a specific asset.
       tags:
         - Swap
       requestBody:
@@ -80,22 +78,61 @@ paths:
               properties:
                 asset:
                   type: string
-                  description: The cryptocurrency asset to check.
+                  description: The asset for which the wallet address format should be validated.
                 walletId:
                   type: string
                   description: The wallet address to validate.
       responses:
         '200':
-          description: Address validation successful
+          description: Wallet address is valid.
         '400':
-          description: Invalid request
+          description: Invalid wallet address.
+
+  /get-price:
+    servers:
+      - url: 'https://api.swaptrade.io/api/swap'
+    post:
+      summary: Calculate Exchange Amount After Fees
+      description: Retrieve the actual amount the user will receive after Swaptrade fees are applied.
+      tags:
+        - Swap
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                coin_send_network:
+                  type: string
+                  description: The network of the cryptocurrency being sent.
+                coin_send:
+                  type: string
+                  description: The cryptocurrency the user wants to send.
+                coin_receive_network:
+                  type: string
+                  description: The network of the cryptocurrency the user wants to receive.
+                coin_receive:
+                  type: string
+                  description: The cryptocurrency the user wants to receive.
+                amount_send:
+                  type: string
+                  description: The amount of cryptocurrency the user is sending.
+                markup:
+                  type: integer
+                  description: Optional markup percentage added to the transaction.
+      responses:
+        '200':
+          description: Price calculated successfully.
+        '400':
+          description: Invalid request.
 
   /create-order:
     servers:
       - url: 'https://api.swaptrade.io/api/swap'
     post:
-      summary: Create a New Swap Order
-      description: Create a new cryptocurrency swap order with specified parameters.
+      summary: Create a New Order
+      description: Submit an order request specifying cryptocurrencies, networks, recipient addresses, and optional references.
       tags:
         - Swap
       requestBody:
@@ -107,40 +144,64 @@ paths:
               properties:
                 coin_send:
                   type: string
-                  description: The cryptocurrency being sent.
+                  description: The cryptocurrency the user is sending.
                 coin_send_network:
                   type: string
-                  description: Network of the sending coin, if applicable.
+                  description: The network of the cryptocurrency being sent.
                 coin_receive:
                   type: string
-                  description: The cryptocurrency to be received.
+                  description: The cryptocurrency the user wants to receive.
                 coin_receive_network:
                   type: string
-                  description: Network of the receiving coin, if applicable.
+                  description: The network of the cryptocurrency to be received.
                 amount_send:
                   type: integer
-                  description: The amount being sent.
+                  description: The amount of cryptocurrency to send.
                 recipient:
                   type: string
-                  description: The receiving wallet address.
+                  description: The wallet address of the recipient.
                 ref:
                   type: string
-                  description: Optional reference for the order.
+                  description: A reference code for internal tracking (optional).
                 markup:
                   type: integer
-                  description: Any markup applied to the order.
+                  description: Optional markup percentage applied to the transaction.
       responses:
         '200':
-          description: Order created successfully
+          description: Order created successfully.
         '400':
-          description: Invalid request parameters
+          description: Invalid request.
+
+  /order:
+    servers:
+      - url: 'https://api.swaptrade.io/api/swap'
+    post:
+      summary: Retrieve Order Details
+      description: Fetch the status and details of a specific order using its unique ID.
+      tags:
+        - Swap
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                order_id:
+                  type: string
+                  description: The unique identifier of the order.
+      responses:
+        '200':
+          description: Order details retrieved successfully.
+        '400':
+          description: Invalid order ID.
 
   /fetch-transaction:
     servers:
       - url: 'https://api.swaptrade.io/api/swap'
     get:
-      summary: Retrieve Transaction Details
-      description: Fetch transaction details based on the transaction ID.
+      summary: Retrieve Transaction by ID
+      description: Fetch transaction details using a unique transaction ID from Fireblocks.
       tags:
         - Swap
       parameters:
@@ -149,37 +210,23 @@ paths:
           required: true
           schema:
             type: string
-            description: The ID of the transaction.
+          description: The unique identifier of the transaction.
       responses:
         '200':
-          description: Transaction details retrieved successfully
+          description: Transaction retrieved successfully.
         '400':
-          description: Invalid request
+          description: Invalid transaction ID.
 
   /assets-info:
     servers:
-      - url: 'https://ec2.swaptrade.io/api/trade'
-    get:
-      summary: Retrieve Asset Information
-      description: Get detailed information about supported assets.
-      tags:
-        - Trade
-      responses:
-        '200':
-          description: Asset information retrieved successfully
-        '400':
-          description: Invalid request
-
-  /withdrawal-fees:
-    servers:
       - url: 'https://api.swaptrade.io/api/trade'
     get:
-      summary: Retrieve Withdrawal Fees
-      description: Get the latest withdrawal fees for all supported assets.
+      summary: Fetch Supported Assets
+      description: Retrieve a list of all supported trading assets.
       tags:
         - Trade
       responses:
         '200':
-          description: Withdrawal fees retrieved successfully
+          description: Supported assets retrieved successfully.
         '400':
-          description: Invalid request
+          description: Invalid request.
