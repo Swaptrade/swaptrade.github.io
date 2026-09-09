@@ -159,6 +159,9 @@ paths:
                 recipient:
                   type: string
                   description: The wallet address of the recipient.
+                refund_address:
+                  type: string
+                  description: Address to return the deposit to if the swap cannot be completed (optional).
                 ref:
                   type: string
                   description: A reference code for internal tracking (optional).
