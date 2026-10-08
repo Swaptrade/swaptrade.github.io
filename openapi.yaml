@@ -1,289 +1,864 @@
-openapi: 3.0.0
+openapi: 3.1.0
 info:
-  title: Swaptrade API Documentation
-  description: Welcome to the official Swaptrade API documentation. This API allows developers to access Swaptrade's cryptocurrency swapping, trading, and liquidity services.
-  version: '1.0.0'
+  title: SwapTrade Swap API
+  version: '2.0.0'
   x-logo:
-    url: 'https://www.swaptrade.io/static/media/swaptrade-logo.666dd459c9af3fadaf0bee6418f61703.svg'
-    altText: Swaptrade
+    url: 'swaptrade-logo.svg'
+    altText: SwapTrade
+    href: 'https://www.swaptrade.io'
+  contact:
+    name: SwapTrade partner support
+    email: admin@swaptrade.io
+  description: |
+    The SwapTrade Swap API lets partners quote cryptocurrency swaps, create them, and follow them until the payout arrives.
+
+    Every endpoint lives under **`https://api.swaptrade.io/api/swap`** and takes and returns JSON.
+    No API key is needed, except for `/get-orders-for-service`.
+
+    # Integration in 5 steps
+
+    1. **List the coins** with `GET /get-coins`. It gives each coin's deposit limits and the **networks** it can be sent and received on.
+    2. **Get a quote** with `POST /get-rate` (quick estimate) or `POST /get-price` (also checks networks and limits).
+    3. **Create the order** with `POST /create-order`, giving the coin **and the network** for both sides.
+       You get back an `order_id`, the deposit address (`server_address`) and the expected `amount_receive`.
+    4. **The user sends the deposit**: exactly `amount_send` of `coin_send`, **on `coin_send_network`**, to `server_address`, within **3 hours**.
+    5. **Track the order** with `POST /order` every 30 to 60 seconds until it reaches a final status (see [Order statuses](#section/Order-statuses)).
+
+    # Networks
+
+    ETH and USDT exist on several chains, so every order must say which chain is used, in `coin_send_network` and `coin_receive_network`.
+
+    **Use the values from the `network` field of `/get-coins`.** It is a comma-separated list: ETH, for example, returns `"network": "BASE,ETH,BSC,ARB"`.
+
+    | Coin | Chain | Value for `coin_send_network` / `coin_receive_network` |
+    |---|---|---|
+    | ETH | Ethereum | `ETH` |
+    | ETH | Base | `BASE` |
+    | ETH | Arbitrum One | `ARB` |
+    | ETH | BNB Smart Chain | `BSC` |
+    | USDT | Ethereum (ERC-20) | `ETH` |
+    | USDT | Tron (TRC-20) | `TRX` |
+    | USDT | BNB Smart Chain (BEP-20) | `BSC` |
+    | BNB | BNB Smart Chain | `BSC` |
+    | BTC | Bitcoin | `BTC` |
+    | BTC | Lightning (deposits only) | `LIGHTNING` |
+    | XMR, LTC, BCH, DOGE, ZEC, ADA, SOL | Their own chain | The coin symbol, for example `XMR` |
+
+    Rules:
+
+    - **USDT and BNB always need a network.** An order without one is refused.
+    - **For ETH, an empty network means Ethereum mainnet**, never Base or Arbitrum. For BTC it means the Bitcoin chain, and for single-chain coins (XMR, LTC, BCH, DOGE, ZEC, ADA, SOL) it means their own chain.
+    - **The deposit address is watched only on the order's network.** A deposit sent on another chain (for example on Base to an Ethereum order) is not detected, and the order expires. Recovering it needs our support team.
+    - Values are not case-sensitive.
+    - The older internal codes keep working for existing integrations: `USDT_ERC20`, `TRX_USDT_S2UZ`, `USDT_BSC`, `BNB_BSC`, `BASECHAIN_ETH`, `ETH-AETH`, `ETH_BSC`.
+    - Anything else is rejected, including `ERC20`, `TRC20`, `BEP20`, `TRON`, `ARBITRUM`, and chains we do not support (for example Robinhood Chain).
+
+    # Responses and errors
+
+    **Every response has HTTP status 200.** The outcome is in the JSON body:
+
+    | Field | Meaning |
+    |---|---|
+    | **success** | `true` or `false`. Check this first. |
+    | **status** | Result code: `200` OK, `400` invalid request, `404` not found, `422` a required field is missing or not a number, `500` or `503` temporary problem (try again later). |
+    | **data** | The result, when `success` is `true`. |
+    | **errors** | When `success` is `false`: a list of `{ "msg": "..." }`. |
+    | **msg** | A short message. A few errors put their text here instead of in `errors`. |
+
+    To show an error, read `errors[0].msg`, and fall back to `msg` when `errors` is missing.
+
+    # Order statuses
+
+    `POST /order` returns `status` as a string.
+
+    | Status | What is happening | Suggested label |
+    |---|---|---|
+    | `1` | Waiting for the deposit | Waiting for payment |
+    | `2` | Deposit received, confirming on chain | Confirming |
+    | `3` | Deposit confirmed, processing | Processing |
+    | `4`, `5` | Exchanging | Exchanging |
+    | `6` | Sending the payout | Sending |
+    | `7` | Payout sent, confirming on chain | Sending |
+    | `8` | **Completed** | Completed |
+    | `9` | **Expired**: no deposit arrived within 3 hours | Expired |
+    | `10` | **On hold**: the deposit was below the minimum | Contact support |
+    | `11` | **On hold**: the order needs a manual review | Contact support |
+    | `12` | **Refunded**: the deposit was sent back to `refund_address` | Refunded |
+    | `13` | Automatic compliance check in progress | Processing |
+
+    Final statuses are `8`, `9` and `12`. Orders at `10` or `11` wait for our support team, then either continue or end as `12`.
+
+    # Support
+
+    For questions or a stuck order, email **admin@swaptrade.io** with the `order_id`.
 
 servers:
-  - url: 'https://api.swaptrade.io/api'
+  - url: 'https://api.swaptrade.io/api/swap'
 
-components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+# The swap endpoints need no authentication; /get-orders-for-service overrides this.
+security: []
+
+tags:
+  - name: Coins and quotes
+    description: What can be swapped, and for how much.
+  - name: Orders
+    description: Create an order and follow it.
+  - name: Utilities
+    description: Optional helpers.
 
 paths:
 
-  /get-rate:
-    servers:
-      - url: 'https://api.swaptrade.io/api/swap'
-    post:
-      summary: Get Cryptocurrency Exchange Rate
-      description: Get the current exchange rate for a specific pair of cryptocurrencies.
-      tags:
-        - Swap
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                coin_send:
-                  type: string
-                  description: The cryptocurrency you are sending.
-                coin_receive:
-                  type: string
-                  description: The cryptocurrency you want to receive.
-      responses:
-        '200':
-          description: Exchange rate retrieved successfully.
-        '400':
-          description: Invalid request.
-
   /get-coins:
-    servers:
-      - url: 'https://api.swaptrade.io/api/swap'
     get:
-      summary: Fetch Supported Cryptocurrencies
-      description: Retrieve the list of supported cryptocurrencies, including prices, min/max amounts, and network fees.
-      tags:
-        - Swap
+      tags: [Coins and quotes]
+      summary: List supported coins
+      operationId: getCoins
+      description: |
+        Returns every coin that can be swapped right now, with its deposit limits and the networks it can be used on.
+        Coins that are switched off are left out.
+
+        Use `id` for `coin_send` / `coin_receive`, and one of the values in `network` for `coin_send_network` / `coin_receive_network`.
       responses:
         '200':
-          description: Supported coins retrieved successfully.
-        '400':
-          description: Invalid request.
+          description: The list of coins.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  status: { type: integer, example: 200 }
+                  msg: { type: string, example: 'Fetch Coins successfully!' }
+                  errors: { $ref: '#/components/schemas/Errors' }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Coin' }
+              examples:
+                coins:
+                  summary: Three of the coins
+                  value:
+                    success: true
+                    status: 200
+                    msg: 'Fetch Coins successfully!'
+                    data:
+                      - name: Ethereum
+                        id: ETH
+                        network: 'BASE,ETH,BSC,ARB'
+                        price: '2561.14000000'
+                        min: 0.1171353381697213
+                        max: 390.45112723240436
+                        min_incoming: 300
+                        max_incoming: 1000000
+                        min_outgoing: 0.1171353381697213
+                        max_outgoing: 390.45112723240436
+                        min_outgoing_USD: 300
+                        max_outgoing_USD: 1000000
+                        fee: '0.8'
+                        network_fee: '0.003124'
+                        amount_scale: 6
+                        memo: false
+                        erc: 1
+                        enabled: true
+                      - name: Tether
+                        id: USDT
+                        network: 'ETH,TRX,BSC'
+                        price: 1
+                        min: 300
+                        max: 1000000
+                        min_incoming: 300
+                        max_incoming: 1000000
+                        min_outgoing: 300
+                        max_outgoing: 1000000
+                        min_outgoing_USD: 300
+                        max_outgoing_USD: 1000000
+                        fee: '0.8'
+                        network_fee: '8.00'
+                        amount_scale: 2
+                        memo: false
+                        erc: 1
+                        enabled: true
+                      - name: Bitcoin
+                        id: BTC
+                        network: 'BTC,LIGHTNING'
+                        price: '82662.04000000'
+                        min: 0.003629235378173585
+                        max: 12.097451260578618
+                        min_incoming: 300
+                        max_incoming: 1000000
+                        min_outgoing: 0.003629235378173585
+                        max_outgoing: 12.097451260578618
+                        min_outgoing_USD: 300
+                        max_outgoing_USD: 1000000
+                        fee: '0.8'
+                        network_fee: '0.00009678'
+                        amount_scale: 8
+                        memo: false
+                        erc: 0
+                        enabled: true
 
-  /check-valid-wallet-address:
-    servers:
-      - url: 'https://api.swaptrade.io/api/swap'
+  /get-rate:
     post:
-      summary: Validate Wallet Address
-      description: Check if a given wallet address is correctly formatted for a specific asset.
-      tags:
-        - Swap
+      tags: [Coins and quotes]
+      summary: Quick quote
+      operationId: getRate
+      description: |
+        Returns an indicative quote. The network fields are not used, so the quote is the same on every network of a coin.
+
+        What `price` means depends on `ref`:
+
+        - **With `ref: "cake"`**: `price` is the **estimated amount of `coin_receive`** the user gets for `amount` of `coin_send`, after SwapTrade fees. If `amount` is missing, 1 is used.
+        - **Without it**: `price` is the market rate for **1** `coin_send`, in `coin_receive`, before fees. `amount` is ignored.
+
+        Only ask for coins listed by `/get-coins`.
+        For the exact amount, checked against the networks and the deposit limits, use `/get-price`.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required: [coin_send, coin_receive]
               properties:
-                asset:
-                  type: string
-                  description: The asset for which the wallet address format should be validated.
-                walletId:
-                  type: string
-                  description: The wallet address to validate.
-      responses:
-        '200':
-          description: Wallet address is valid.
-        '400':
-          description: Invalid wallet address.
-
-  /get-price:
-    servers:
-      - url: 'https://api.swaptrade.io/api/swap'
-    post:
-      summary: Calculate Exchange Amount After Fees
-      description: Retrieve the actual amount the user will receive after Swaptrade fees are applied.
-      tags:
-        - Swap
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                coin_send_network:
-                  type: string
-                  description: The network of the cryptocurrency being sent.
                 coin_send:
                   type: string
-                  description: The cryptocurrency the user wants to send.
-                coin_receive_network:
-                  type: string
-                  description: The network of the cryptocurrency the user wants to receive.
+                  description: Coin the user sends (an `id` from `/get-coins`).
+                  example: USDT
                 coin_receive:
                   type: string
-                  description: The cryptocurrency the user wants to receive.
-                amount_send:
-                  type: string
-                  description: The amount of cryptocurrency the user is sending.
-                markup:
-                  type: integer
-                  description: Optional markup percentage added to the transaction.
-      responses:
-        '200':
-          description: Price calculated successfully.
-        '400':
-          description: Invalid request.
-
-  /create-order:
-    servers:
-      - url: 'https://api.swaptrade.io/api/swap'
-    post:
-      summary: Create a New Order
-      description: Submit an order request specifying cryptocurrencies, networks, recipient addresses, and optional references.
-      tags:
-        - Swap
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                coin_send:
-                  type: string
-                  description: The cryptocurrency the user is sending.
-                coin_send_network:
-                  type: string
-                  description: The network of the cryptocurrency being sent.
-                coin_receive:
-                  type: string
-                  description: The cryptocurrency the user wants to receive.
-                coin_receive_network:
-                  type: string
-                  description: The network of the cryptocurrency to be received.
-                amount_send:
-                  type: integer
-                  description: The amount of cryptocurrency to send.
-                recipient:
-                  type: string
-                  description: The wallet address of the recipient.
-                refund_address:
-                  type: string
-                  description: Address to return the deposit to if the swap cannot be completed (optional).
+                  description: Coin the user receives (an `id` from `/get-coins`).
+                  example: XMR
+                amount:
+                  type: [string, number]
+                  description: Amount of `coin_send` to quote. Used only together with `ref`.
+                  example: '500'
                 ref:
                   type: string
-                  description: A reference code for internal tracking (optional).
-                markup:
-                  type: integer
-                  description: Optional markup percentage applied to the transaction.
+                  description: Your partner reference.
+                  example: cake
+            examples:
+              withRef:
+                summary: Estimated receive amount (with ref)
+                value: { coin_send: USDT, coin_receive: XMR, amount: '500', ref: cake }
+              marketRate:
+                summary: Market rate for 1 coin (no ref)
+                value: { coin_send: BTC, coin_receive: ETH }
       responses:
         '200':
-          description: Order created successfully.
-        '400':
-          description: Invalid request.
+          description: The quote, or an error (see [Responses and errors](#section/Responses-and-errors)).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  status: { type: integer }
+                  msg: { type: string }
+                  errors: { $ref: '#/components/schemas/Errors' }
+                  data:
+                    type: object
+                    properties:
+                      price:
+                        type: [string, number]
+                        description: With `ref`, the estimated amount of `coin_receive` for `amount`. Without it, the market rate for 1 `coin_send`.
+                      symbol:
+                        type: string
+                        description: The pair, `coin_send` followed by `coin_receive`.
+              examples:
+                withRef:
+                  summary: 500 USDT gives about 0.869 XMR
+                  value:
+                    success: true
+                    status: 200
+                    msg: 'Fetch Full Rate successfully !'
+                    data: { price: '0.8690211236851878', symbol: USDTXMR }
+                marketRate:
+                  summary: 1 BTC is worth about 32.28 ETH
+                  value:
+                    success: true
+                    status: 200
+                    msg: 'Fetch Full Rate successfully !'
+                    data: { price: '32.27637276607043', symbol: BTCETH }
 
-  /order:
-    servers:
-      - url: 'https://api.swaptrade.io/api/swap'
+  /get-price:
     post:
-      summary: Retrieve Order Details
-      description: Fetch the status and details of a specific order using its unique ID.
-      tags:
-        - Swap
+      tags: [Coins and quotes]
+      summary: Exact quote
+      operationId: getPrice
+      description: |
+        Returns the amount of `coin_receive` for `amount_send` of `coin_send`, after SwapTrade fees.
+
+        Unlike `/get-rate`, it checks that both coins and both networks are supported and that `amount_send` is within the deposit limits.
+        Send the same values you will send to `/create-order`.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required: [coin_send, coin_receive, amount_send]
+              properties:
+                coin_send:
+                  type: string
+                  description: Coin the user sends.
+                  example: USDT
+                coin_send_network:
+                  type: string
+                  description: Network of the deposit. See [Networks](#section/Networks).
+                  example: TRX
+                coin_receive:
+                  type: string
+                  description: Coin the user receives.
+                  example: XMR
+                coin_receive_network:
+                  type: string
+                  description: Network of the payout. See [Networks](#section/Networks).
+                  example: XMR
+                amount_send:
+                  type: [string, number]
+                  description: Amount of `coin_send` the user will deposit.
+                  example: '500'
+                markup:
+                  type: number
+                  description: Your markup in percent (`1.7` means 1.7%), if agreed with SwapTrade.
+                  example: 1.7
+      responses:
+        '200':
+          description: The quote, or an error (see [Responses and errors](#section/Responses-and-errors)).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  status: { type: integer }
+                  msg: { type: string }
+                  errors: { $ref: '#/components/schemas/Errors' }
+                  data:
+                    type: object
+                    description: Note that the amount is nested one level down, in `data.data`.
+                    properties:
+                      data:
+                        type: number
+                        description: Amount of `coin_receive` the user gets.
+              examples:
+                ok:
+                  summary: Quote
+                  value:
+                    success: true
+                    status: 200
+                    msg: 'Get price successful !'
+                    data: { data: 0.88522434 }
+                unsupportedCoin:
+                  summary: Coin not supported
+                  value:
+                    success: false
+                    status: 400
+                    errors: [{ msg: 'Invalid coin send' }]
+                unsupportedNetwork:
+                  summary: Network not supported (text is in msg)
+                  value:
+                    success: false
+                    status: 404
+                    msg: 'Coin send network Not Found !'
+                belowMinimum:
+                  summary: Amount below the minimum
+                  value:
+                    success: false
+                    status: 400
+                    errors: [{ msg: 'Amount send is less than minimum' }]
+                missingField:
+                  summary: Missing or non-numeric amount_send
+                  value:
+                    success: false
+                    status: 422
+                    errors:
+                      - { msg: 'Invalid value', param: amount_send, location: body }
+                      - { msg: 'Please use a integer value', param: amount_send, location: body }
+
+  /create-order:
+    post:
+      tags: [Orders]
+      summary: Create an order
+      operationId: createOrder
+      description: |
+        Creates a swap and returns the address the user must pay to.
+
+        After this call the user must send **exactly `amount_send` of `coin_send`, on `coin_send_network`, to `server_address`, within 3 hours**.
+        Then follow the order with `/order`.
+
+        The order is refused when:
+
+        - a coin or a network is not supported (see [Networks](#section/Networks)),
+        - `amount_send` is outside `min` and `max` from `/get-coins`,
+        - `recipient` is not a valid address on `coin_receive_network`.
+
+        If less than `amount_send` arrives, but still at least the minimum, `amount_receive` is recalculated from the amount received.
+        The payout is never more than the `amount_receive` returned here.
+        A deposit below the minimum puts the order on hold (status `10`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [coin_send, coin_receive, amount_send, recipient]
+              properties:
+                coin_send:
+                  type: string
+                  description: Coin the user sends (an `id` from `/get-coins`).
+                  example: ETH
+                coin_send_network:
+                  type: string
+                  description: Network the user sends on. See [Networks](#section/Networks). Required for USDT and BNB. For ETH, empty means Ethereum mainnet.
+                  example: BASE
+                coin_receive:
+                  type: string
+                  description: Coin the user receives (an `id` from `/get-coins`).
+                  example: XMR
+                coin_receive_network:
+                  type: string
+                  description: Network the payout is sent on. See [Networks](#section/Networks). Required for USDT and BNB. For ETH, empty means Ethereum mainnet. `LIGHTNING` is not accepted here.
+                  example: XMR
+                amount_send:
+                  type: [string, number]
+                  description: Amount of `coin_send` the user will deposit. Must be between `min` and `max` from `/get-coins`.
+                  example: '0.5'
+                recipient:
+                  type: string
+                  description: Address that receives the payout. It must be valid on `coin_receive_network`.
+                  example: '<the user payout address>'
+                refund_address:
+                  type: string
+                  description: |
+                    Optional, but strongly recommended. An address on `coin_send_network` where the deposit is returned if the swap cannot be completed.
+                    Without it, a refund needs the user to contact support.
+                  example: '<the user refund address>'
+                ref:
+                  type: string
+                  description: Your partner reference.
+                  example: cake
+                markup:
+                  type: number
+                  description: Your markup in percent (`1.7` means 1.7%), as agreed with SwapTrade.
+                  example: 1.7
+            examples:
+              ethOnBaseToXmr:
+                summary: ETH on Base to XMR
+                value:
+                  coin_send: ETH
+                  coin_send_network: BASE
+                  coin_receive: XMR
+                  coin_receive_network: XMR
+                  amount_send: '0.5'
+                  recipient: '<XMR address>'
+                  refund_address: '<Base address>'
+                  ref: cake
+                  markup: 1.7
+              usdtTronToBtc:
+                summary: USDT on Tron to BTC
+                value:
+                  coin_send: USDT
+                  coin_send_network: TRX
+                  coin_receive: BTC
+                  coin_receive_network: BTC
+                  amount_send: '500'
+                  recipient: '<BTC address>'
+                  refund_address: '<Tron address>'
+                  ref: cake
+                  markup: 1.7
+              btcToEthOnArbitrum:
+                summary: BTC to ETH on Arbitrum
+                value:
+                  coin_send: BTC
+                  coin_send_network: BTC
+                  coin_receive: ETH
+                  coin_receive_network: ARB
+                  amount_send: '0.01'
+                  recipient: '<Arbitrum address>'
+                  refund_address: '<BTC address>'
+                  ref: cake
+                  markup: 1.7
+      responses:
+        '200':
+          description: The new order, or an error (see [Responses and errors](#section/Responses-and-errors)).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  status: { type: integer }
+                  msg: { type: string }
+                  errors: { $ref: '#/components/schemas/Errors' }
+                  data: { $ref: '#/components/schemas/CreatedOrder' }
+              examples:
+                ok:
+                  summary: Order created
+                  value:
+                    success: true
+                    status: 200
+                    msg: 'Create Order successfully !'
+                    data:
+                      order_id: '3f2a9c1e-7b4d-4e8a-9c2f-1a2b3c4d5e6f'
+                      server_address: '<deposit address>'
+                      amount_receive: '2.2650'
+                wrongNetwork:
+                  summary: Network not supported
+                  value:
+                    success: false
+                    status: 400
+                    errors: [{ msg: 'Invalid coin send network' }]
+                badRecipient:
+                  summary: Recipient address not valid on the payout network (text is in msg)
+                  value:
+                    success: false
+                    status: 404
+                    msg: 'Wallet address is invalid ! '
+                lightningPayout:
+                  summary: Lightning used as the payout network
+                  value:
+                    success: false
+                    status: 400
+                    errors: [{ msg: 'LIGHTNING network is supported only for deposits (coin_send_network).' }]
+
+  /order:
+    post:
+      tags: [Orders]
+      summary: Get an order
+      operationId: getOrder
+      description: |
+        Returns an order and its current `status` (see [Order statuses](#section/Order-statuses)).
+        Poll every 30 to 60 seconds, and stop at a final status: `8`, `9` or `12`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order_id]
               properties:
                 order_id:
                   type: string
-                  description: The unique identifier of the order.
+                  description: The `order_id` returned by `/create-order`.
+                  example: '3f2a9c1e-7b4d-4e8a-9c2f-1a2b3c4d5e6f'
       responses:
         '200':
-          description: Order details retrieved successfully.
-        '400':
-          description: Invalid order ID.
+          description: 'The order, or an error. An unknown `order_id` returns `success: false`.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  status: { type: integer }
+                  msg: { type: string }
+                  errors: { $ref: '#/components/schemas/Errors' }
+                  data: { $ref: '#/components/schemas/Order' }
+              examples:
+                waiting:
+                  summary: Waiting for the deposit
+                  value:
+                    success: true
+                    status: 200
+                    msg: 'Fetch Order successfully !'
+                    data:
+                      order_id: '3f2a9c1e-7b4d-4e8a-9c2f-1a2b3c4d5e6f'
+                      status: '1'
+                      coin_send: ETH
+                      coin_send_network: BASECHAIN_ETH
+                      coin_send_network_name: BASE
+                      amount_send: '0.5000000000'
+                      coin_receive: XMR
+                      coin_receive_network: XMR
+                      coin_receive_network_name: XMR
+                      amount_receive: '2.2650'
+                      recipient: '<XMR address>'
+                      refund_address: '<Base address>'
+                      server_address: '<deposit address>'
+                      incoming_tx: null
+                      outgoing_tx: ''
+                      memo: null
+                      created_at: '2026-10-08T10:00:00.000Z'
+                      updated_at: '2026-10-08T10:00:00.000Z'
+                unknown:
+                  summary: Unknown order_id
+                  value:
+                    success: false
+                    status: 400
+                    errors: [{ msg: 'Something went wrong. Please try again .' }]
 
-  /fetch-transaction:
-    servers:
-      - url: 'https://api.swaptrade.io/api/swap'
-    get:
-      summary: Retrieve Transaction by ID
-      description: Fetch transaction details using a unique transaction ID from Fireblocks.
-      tags:
-        - Swap
-      parameters:
-        - name: orderId
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The unique identifier of the transaction.
+  /check-valid-wallet-address:
+    post:
+      tags: [Utilities]
+      summary: Check an address
+      operationId: checkValidWalletAddress
+      description: |
+        Checks that an address has the right format for a network.
+        `/create-order` runs the same check on `recipient`, so you can use this to warn the user before creating the order.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [walletId, asset]
+              properties:
+                walletId:
+                  type: string
+                  description: The address to check.
+                  example: 'TCthyrYYQ5xKoqytFrtLNYUBzA7iSprape'
+                asset:
+                  type: string
+                  description: The network the address belongs to, as listed in [Networks](#section/Networks) (for example `TRX`, `ETH`, `BASE`, `ARB`, `BSC`, `BTC`, `XMR`).
+                  example: TRX
       responses:
         '200':
-          description: Transaction retrieved successfully.
-        '400':
-          description: Invalid transaction ID.
-
-  /assets-info:
-    servers:
-      - url: 'https://ec2.swaptrade.io/api/trade'
-    get:
-      summary: Fetch Supported Assets
-      description: Retrieve a list of all supported trading assets.
-      tags:
-        - Trade
-      responses:
-        '200':
-          description: Supported assets retrieved successfully.
-        '400':
-          description: Invalid request.
+          description: '`success: true` when the address is valid.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  status: { type: integer, description: '`200` valid, `404` invalid.' }
+                  msg: { type: string }
+                  errors: { $ref: '#/components/schemas/Errors' }
+              examples:
+                valid:
+                  summary: Valid
+                  value: { success: true, status: 200, msg: 'Wallet address is valid ! ' }
+                invalid:
+                  summary: Not valid
+                  value: { success: false, status: 404, msg: 'Wallet address is invalid ! ' }
 
   /get-orders-for-service:
-    servers:
-      - url: 'https://api.swaptrade.io/api/swap'
     get:
-      summary: Retrieve Orders for Service
-      description: Fetch details of all service orders using required headers.
-      tags:
-        - Swap
-      parameters:
-        - name: trocadoor
-          in: header
-          required: true
-          schema:
-            type: string
-          description: The authorization header for the Trocadoor service.
-        - name: swapspace
-          in: header
-          required: true
-          schema:
-            type: string
-          description: The authorization header for the Swapspace service.
-        - name: flashift
-          in: header
-          required: true
-          schema:
-            type: string
-          description: The authorization header for the Flashift service.
-        - name: cake
-          in: header
-          required: true
-          schema:
-            type: string
-          description: The authorization header for the Cake service.
+      tags: [Utilities]
+      summary: List your orders
+      operationId: getOrdersForService
+      description: |
+        Returns every order created with your partner reference.
+        Send **one** header, named after your service, whose value is the partner token SwapTrade gave you,
+        for example `cake: <your partner token>`.
+      security:
+        - partnerToken: []
       responses:
         '200':
-          description: Orders fetched successfully.
-        '400':
-          description: Invalid request.
-        '401':
-          description: Unauthorized access.
+          description: 'Your orders, or `success: false` when the token is wrong.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  status: { type: integer }
+                  msg: { type: string }
+                  errors: { $ref: '#/components/schemas/Errors' }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/OrderSummary' }
+              examples:
+                orders:
+                  summary: Your orders
+                  value:
+                    success: true
+                    status: 200
+                    msg: 'Fetch Orders successfully !'
+                    data:
+                      - order_id: '3f2a9c1e-7b4d-4e8a-9c2f-1a2b3c4d5e6f'
+                        status: '8'
+                        coin_send: USDT
+                        coin_send_network: TRX_USDT_S2UZ
+                        amount_send: '500.0000000000'
+                        coin_receive: XMR
+                        coin_receive_network: XMR
+                        amount_receive: '0.8690210000'
+                        recipient: '<XMR address>'
+                        server_address: '<deposit address>'
+                        created_at: '2026-10-08T10:00:00.000Z'
+                        updated_at: '2026-10-08T10:42:00.000Z'
 
-  /withdrawal-fees:
-    servers:
-      - url: 'https://api.swaptrade.io/api/trade'
-    get:
-      summary: Retrieve Withdrawal Fees
-      description: Fetch the applicable withdrawal fees for various cryptocurrencies.
-      tags:
-        - Trade
-      responses:
-        '200':
-          description: Withdrawal fees retrieved successfully.
-        '400':
-          description: Invalid request.
+components:
+  securitySchemes:
+    partnerToken:
+      type: apiKey
+      in: header
+      name: cake
+      description: |
+        Your partner token, sent in a header named after your service.
+        Cake sends it as `cake: <token>`; other partners use `trocadoor`, `swapspace` or `flashift` as the header name.
+
+  schemas:
+
+    Errors:
+      type: array
+      description: Present when `success` is `false`. Show `errors[0].msg` to the user.
+      items:
+        type: object
+        properties:
+          msg:
+            type: string
+            description: The error message.
+          param:
+            type: string
+            description: For `422` errors, the field that failed.
+          location:
+            type: string
+            description: For `422` errors, where that field was (`body`).
+
+    Coin:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Coin symbol. Use it in `coin_send` / `coin_receive`.
+          example: ETH
+        name:
+          type: string
+          description: Display name.
+          example: Ethereum
+        network:
+          type: string
+          description: Comma-separated networks you can use in `coin_send_network` / `coin_receive_network`. A coin with a single chain lists just itself.
+          example: 'BASE,ETH,BSC,ARB'
+        min:
+          type: number
+          description: Smallest deposit (`amount_send`), in coin units.
+        max:
+          type: number
+          description: Largest deposit (`amount_send`), in coin units.
+        min_incoming:
+          type: number
+          description: Smallest deposit, in USD.
+        max_incoming:
+          type: number
+          description: Largest deposit, in USD.
+        min_outgoing:
+          type: number
+          description: Smallest payout of this coin, in coin units.
+        max_outgoing:
+          type: number
+          description: Largest payout of this coin, in coin units.
+        min_outgoing_USD:
+          type: number
+          description: Smallest payout of this coin, in USD.
+        max_outgoing_USD:
+          type: number
+          description: Largest payout of this coin, in USD.
+        price:
+          type: [string, number]
+          description: Current price in USD.
+        fee:
+          type: string
+          description: SwapTrade fee, in percent.
+          example: '0.8'
+        network_fee:
+          type: string
+          description: Estimated network fee for sending this coin, in coin units.
+        amount_scale:
+          type: integer
+          description: Number of decimals used for this coin.
+        memo:
+          type: boolean
+          description: '`true` if deposits of this coin need a memo or tag.'
+        erc:
+          type: integer
+          description: Internal coin type (`1` account-based, `0` UTXO). You can ignore it.
+        enabled:
+          type: boolean
+          description: Always `true` here. Coins that are switched off are not listed.
+
+    CreatedOrder:
+      type: object
+      properties:
+        order_id:
+          type: string
+          description: The order's ID. Keep it to follow the order with `/order`.
+        server_address:
+          type: string
+          description: The deposit address. The user sends `coin_send` here, on `coin_send_network`.
+        amount_receive:
+          type: [string, number]
+          description: Expected amount of `coin_receive`.
+        breezInvoice:
+          type: string
+          description: Lightning deposits only. The invoice the user pays instead of sending to an address.
+        breezPaymentHash:
+          type: string
+          description: Lightning deposits only. The invoice's payment hash.
+        breezInvoiceExpiry:
+          type: [string, number]
+          description: Lightning deposits only. When the invoice expires.
+
+    Order:
+      type: object
+      description: The order. Other fields may be present; you can ignore them.
+      properties:
+        order_id:
+          type: string
+        status:
+          type: string
+          description: See [Order statuses](#section/Order-statuses).
+          example: '1'
+        coin_send:
+          type: string
+        coin_send_network:
+          type: string
+          description: Internal network code, for example `TRX_USDT_S2UZ`. Use `coin_send_network_name` to show it.
+        coin_send_network_name:
+          type: string
+          description: The network's name, for example `TRX` or `BASE`.
+        amount_send:
+          type: string
+          description: The amount to deposit. Once the deposit arrives, it is the amount actually received.
+        coin_receive:
+          type: string
+        coin_receive_network:
+          type: string
+          description: Internal network code. Use `coin_receive_network_name` to show it.
+        coin_receive_network_name:
+          type: string
+          description: The network's name.
+        amount_receive:
+          type: string
+          description: Expected amount of `coin_receive`.
+        recipient:
+          type: string
+          description: Payout address.
+        refund_address:
+          type: [string, 'null']
+          description: Refund address, if one was given.
+        server_address:
+          type: string
+          description: Deposit address.
+        incoming_tx:
+          type: [string, 'null']
+          description: Hash of the deposit transaction, once detected.
+        outgoing_tx:
+          type: [string, 'null']
+          description: Hash of the payout transaction, when available.
+        memo:
+          type: [string, 'null']
+          description: Lightning deposits only. The payment hash.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    OrderSummary:
+      type: object
+      properties:
+        order_id: { type: string }
+        status: { type: string, description: 'See [Order statuses](#section/Order-statuses).' }
+        coin_send: { type: string }
+        coin_send_network: { type: string }
+        amount_send: { type: string }
+        coin_receive: { type: string }
+        coin_receive_network: { type: string }
+        amount_receive: { type: string }
+        recipient: { type: string }
+        server_address: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
